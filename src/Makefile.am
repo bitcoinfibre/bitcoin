@@ -130,6 +130,7 @@ BITCOIN_CORE_H = \
   cuckoocache.h \
   flatfile.h \
   fs.h \
+  fec.h \
   httprpc.h \
   httpserver.h \
   index/base.h \
@@ -282,6 +283,7 @@ libbitcoin_server_a_SOURCES = \
   blockfilter.cpp \
   chain.cpp \
   consensus/tx_verify.cpp \
+  fec.cpp \
   flatfile.cpp \
   httprpc.cpp \
   httpserver.cpp \
