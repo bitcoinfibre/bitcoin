@@ -102,6 +102,7 @@ namespace BCLog {
         QT          = (1 << 19),
         LEVELDB     = (1 << 20),
         UDPNET      = (1 << 21),
+        FEC         = (1 << 22),
         ALL         = ~(uint32_t)0,
     };
 }
