@@ -446,6 +446,93 @@ public:
 
 
 
+/** Write-only stream for serialization into a vector */
+class VectorOutputStream {
+private:
+    std::vector<unsigned char>* v;
+
+    int nType;
+    int nVersion;
+    size_t nPos;
+
+    inline void resize_v(size_t nCount) {
+        v->resize(std::max(v->size(), nPos + nCount));
+    }
+public:
+    VectorOutputStream(std::vector<unsigned char>* vIn, int nTypeIn, int nVersionIn, ssize_t nPosIn=-1) :
+        v(vIn), nType(nTypeIn), nVersion(nVersionIn) {
+        nPos = nPosIn == -1 ? v->size() : nPosIn;
+    }
+
+    template <typename T>
+    VectorOutputStream& operator<<(const T& obj) {
+        ::Serialize(*this, obj);
+        return *this;
+    }
+
+    VectorOutputStream& write(const char* pch, size_t nSize) {
+        resize_v(nSize);
+        memcpy(&(*v)[nPos], pch, nSize);
+        nPos += nSize;
+        return *this;
+    }
+
+    void skip_bytes(size_t nCount) {
+        resize_v(nCount);
+        nPos += nCount;
+    }
+
+    size_t pos() const     { return nPos; }
+    int GetType() const    { return nType; }
+    int GetVersion() const { return nVersion; }
+};
+
+
+
+/** Read-only stream for serialization from a vector */
+class VectorInputStream {
+private:
+    const std::vector<unsigned char>* v;
+
+    int nType;
+    int nVersion;
+    size_t nReadPos;
+public:
+    VectorInputStream(const std::vector<unsigned char>* vIn, int nTypeIn, int nVersionIn) :
+        v(vIn), nType(nTypeIn), nVersion(nVersionIn), nReadPos(0) {}
+
+    template <typename T>
+    VectorInputStream& operator>>(T& obj) {
+        ::Unserialize(*this, obj);
+        return *this;
+    }
+
+    VectorInputStream& read(char* pch, size_t nSize) {
+        // Read from the beginning of the buffer
+        unsigned int nReadPosNext = nReadPos + nSize;
+        if (nReadPosNext > v->size())
+            throw std::ios_base::failure("CDataStream::read(): end of data");
+        memcpy(pch, &(*v)[nReadPos], nSize);
+        nReadPos = nReadPosNext;
+        return (*this);
+    }
+
+    void seek(size_t nReadPosIn) {
+        assert(nReadPosIn < v->size());
+        nReadPos = nReadPosIn;
+    }
+
+    size_t pos() const     { return nReadPos; }
+    int GetType() const    { return nType; }
+    int GetVersion() const { return nVersion; }
+};
+
+
+
+
+
+
+
 /** Non-refcounted RAII wrapper for FILE*
  *
  * Will automatically close the file when it goes out of scope if not null.
