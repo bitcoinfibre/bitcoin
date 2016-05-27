@@ -9,6 +9,8 @@
 
 #include "test/test_bitcoin.h"
 
+#include "test/data/block413567.hex.h"
+
 #include <boost/test/unit_test.hpp>
 
 std::vector<std::pair<uint256, CTransactionRef>> extra_txn;
