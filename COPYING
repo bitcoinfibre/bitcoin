@@ -1,3 +1,8 @@
+Most of the files in this software are licensed under the MIT license.
+Others have a different license (see src/fec/, src/udpnet.*, src/blockencodings.*, etc).
+Note that you must ensure that you comply with ALL of the licenses in each
+file, not just the MIT license
+
 The MIT License (MIT)
 
 Copyright (c) 2009-2017 The Bitcoin Core developers
