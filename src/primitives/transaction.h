@@ -11,8 +11,10 @@
 #include <script/script.h>
 #include <serialize.h>
 #include <uint256.h>
+#include <version.h>
 
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
+static const int SERIALIZE_TRANSACTION_NO_CACHE = 0x10000000;
 
 /** An outpoint - a combination of a transaction hash and an index n into its vout */
 class COutPoint
@@ -294,6 +296,8 @@ private:
     const uint256 hash;
     const uint256 m_witness_hash;
 
+    mutable std::vector<unsigned char> encodedForm;
+
     uint256 ComputeHash() const;
     uint256 ComputeWitnessHash() const;
 
@@ -303,17 +307,20 @@ public:
 
     /** Convert a CMutableTransaction into a CTransaction. */
     explicit CTransaction(const CMutableTransaction &tx);
-    CTransaction(CMutableTransaction &&tx);
+    CTransaction(CMutableTransaction &&tx, bool fCache=true);
 
     template <typename Stream>
     inline void Serialize(Stream& s) const {
-        SerializeTransaction(*this, s);
+        if (encodedForm.size() && s.GetVersion() == PROTOCOL_VERSION)
+            s.write((const char*)&encodedForm[0], encodedForm.size());
+        else
+            SerializeTransaction(*this, s);
     }
 
     /** This deserializing constructor is provided instead of an Unserialize method.
      *  Unserialize is not possible, since it would require overwriting const fields. */
     template <typename Stream>
-    CTransaction(deserialize_type, Stream& s) : CTransaction(CMutableTransaction(deserialize, s)) {}
+    CTransaction(deserialize_type, Stream& s) : CTransaction(CMutableTransaction(deserialize, s), !(s.GetVersion() & SERIALIZE_TRANSACTION_NO_CACHE)) {}
 
     bool IsNull() const {
         return vin.empty() && vout.empty();
@@ -321,6 +328,7 @@ public:
 
     const uint256& GetHash() const { return hash; }
     const uint256& GetWitnessHash() const { return m_witness_hash; };
+    const std::vector<unsigned char>& GetEncodedForm() const { return encodedForm; }
 
     // Return sum of txouts.
     CAmount GetValueOut() const;
