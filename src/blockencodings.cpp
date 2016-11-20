@@ -78,8 +78,12 @@ namespace
     };
 } // anonymous namespace
 
-
 ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& cmpctblock, const std::vector<std::pair<uint256, CTransactionRef>>& extra_txn) {
+    const bool fBench = LogAcceptCategory(BCLog::BENCH);
+    std::chrono::steady_clock::time_point start;
+    if (fBench)
+        start = std::chrono::steady_clock::now();
+
     if (cmpctblock.header.IsNull() || (cmpctblock.shorttxids.empty() && cmpctblock.prefilledtxn.empty()))
         return READ_STATUS_INVALID;
     if (cmpctblock.shorttxids.size() + cmpctblock.prefilledtxn.size() > MAX_BLOCK_WEIGHT / MIN_SERIALIZABLE_TRANSACTION_WEIGHT)
@@ -112,6 +116,10 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     }
 
     // Calculate map of txids -> positions and check mempool to see what we have (or don't)
+    std::chrono::steady_clock::time_point prefilled_filled;
+    if (fBench)
+        prefilled_filled = std::chrono::steady_clock::now();
+
     // Because well-formed cmpctblock messages will have a (relatively) uniform distribution
     // of short IDs, any highly-uneven distribution of elements can be safely treated as a
     // READ_STATUS_FAILED.
@@ -131,6 +139,11 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         return READ_STATUS_FAILED; // Short ID collision
 
     std::vector<bool> have_txn(txn_available.size());
+
+    std::chrono::steady_clock::time_point shortids_mapped;
+    if (fBench)
+        shortids_mapped = std::chrono::steady_clock::now();
+
     {
     LOCK(pool->cs);
     const std::vector<uint256>& vTxHashes = pool->vTxHashes;
@@ -201,6 +214,11 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
         // the extra risk.
         if (mempool_count == shorttxids.size())
             break;
+    }
+
+    if (fBench) {
+        std::chrono::steady_clock::time_point finished(std::chrono::steady_clock::now());
+        LogPrintf("PartiallyDownloadedBlock::InitData took %lf %lf %lf ms\n", to_millis_double(prefilled_filled - start), to_millis_double(shortids_mapped - prefilled_filled), to_millis_double(finished - shortids_mapped));
     }
 
     LogPrint(BCLog::CMPCTBLOCK, "Initialized PartiallyDownloadedBlock for block %s using a cmpctblock of size %lu\n", cmpctblock.header.GetHash().ToString(), GetSerializeSize(cmpctblock, PROTOCOL_VERSION));
