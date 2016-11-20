@@ -583,7 +583,7 @@ ReadStatus PartiallyDownloadedChunkBlock::FinalizeBlock() {
     // and decode transactions as we go...this will not only save the deserialize
     // time we spend here, but by calling GetHash() at that time, save the
     // hashing time we'll spend later to check the hash of each transaction.
-    VectorInputStream stream(&codedBlock, SER_NETWORK, PROTOCOL_VERSION);
+    VectorInputStream stream(&codedBlock, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_CACHE);
     for (std::map<size_t, size_t>::const_iterator it = index_offsets.begin(); it != index_offsets.end(); it++) {
         if (block.vtx[it->second])
             continue;
