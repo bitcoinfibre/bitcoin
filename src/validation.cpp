@@ -33,6 +33,7 @@
 #include "tinyformat.h"
 #include "txdb.h"
 #include "txmempool.h"
+#include "udpapi.h"
 #include "ui_interface.h"
 #include "undo.h"
 #include "util.h"
@@ -3135,8 +3136,10 @@ static bool AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CValidation
 
     // Header is valid/has work, merkle tree and segwit merkle tree are good...RELAY NOW
     // (but if it does not build on our best tip, let the SendMessages loop relay it)
-    if (!IsInitialBlockDownload() && chainActive.Tip() == pindex->pprev)
+    if (!IsInitialBlockDownload() && chainActive.Tip() == pindex->pprev) {
+        UDPRelayBlock(block); // TODO: Do this via NewPoWValidBlock!
         GetMainSignals().NewPoWValidBlock(pindex, pblock);
+    }
 
     int nHeight = pindex->nHeight;
 
