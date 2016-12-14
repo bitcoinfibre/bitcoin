@@ -2842,6 +2842,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             ProcessNewBlock(chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
             if (fNewBlock) {
                 pfrom->nLastBlockTime = GetTime();
+                if (fLogIPs)
+                    LogPrint(BCLog::BENCH, "Block %s provided by %s\n", pblock->GetHash().ToString(), pfrom->addr.ToString());
             } else {
                 LOCK(cs_main);
                 mapBlockSource.erase(pblock->GetHash());
@@ -2931,6 +2933,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             ProcessNewBlock(chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
             if (fNewBlock) {
                 pfrom->nLastBlockTime = GetTime();
+                if (fLogIPs)
+                    LogPrint(BCLog::BENCH, "Block %s provided by %s\n", resp.blockhash.ToString(), pfrom->addr.ToString());
             } else {
                 LOCK(cs_main);
                 mapBlockSource.erase(pblock->GetHash());
@@ -2993,6 +2997,8 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         ProcessNewBlock(chainparams, pblock, forceProcessing, &fNewBlock);
         if (fNewBlock) {
             pfrom->nLastBlockTime = GetTime();
+            if (fLogIPs)
+                LogPrint(BCLog::BENCH, "Block %s provided by %s\n", pblock->GetHash().ToString(), pfrom->addr.ToString());
         } else {
             LOCK(cs_main);
             mapBlockSource.erase(pblock->GetHash());
