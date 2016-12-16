@@ -525,3 +525,42 @@ void wh256_free(wh256_state E)
 
     delete codec;
 }
+
+void wh256_free_blocks(wh256_state E) {
+    CodecState* codec = reinterpret_cast<CodecState*>(E);
+
+    if (!codec)
+    {
+        return;
+    }
+
+    if (codec->UsingWirehair)
+    {
+        codec->WirehairCodec->FreeDataSpecificStorage();
+    }
+}
+
+wh256_state wh256_duplicate(wh256_state duplicate_E) {
+    const CodecState* duplicate_codec = reinterpret_cast<CodecState*>(duplicate_E);
+
+    if (!duplicate_codec)
+    {
+        return NULL;
+    }
+
+    CodecState* codec = new CodecState;
+
+    if (duplicate_codec->UsingWirehair)
+    {
+        codec->UsingWirehair = true;
+        codec->WirehairCodec = new wirehair::Codec(*duplicate_codec->WirehairCodec);
+    }
+    else
+    {
+        codec->UsingWirehair = false;
+        codec->ResetCM256();
+        codec->EncoderParams = duplicate_codec->EncoderParams;
+    }
+
+    return codec;
+}

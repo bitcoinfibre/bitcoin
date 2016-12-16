@@ -252,7 +252,12 @@ class Codec
 
 public:
     Codec();
+    Codec(const Codec& c); // Copy constructor to use for pre-calced matrix storage
     ~Codec();
+
+
+    //// Wipes a bunch of state to make this object suitable for use as pre-calculated matrix storage
+    void FreeDataSpecificStorage();
 
 
     //// Accessors

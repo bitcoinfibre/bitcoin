@@ -5279,6 +5279,87 @@ Codec::~Codec()
     FreeInput();
 }
 
+Codec::Codec(const Codec& c)
+{
+    memcpy(this, &c, sizeof(*this));
+
+    if (_input_allocated) {
+        // Allocate input blocks
+        _input_blocks = new(std::nothrow) uint8_t[_input_allocated];
+        if (!_input_blocks) goto fail;
+        memcpy(_input_blocks, c._input_blocks, _input_allocated);
+    }
+
+    if (_workspace_allocated) {
+        // Count needed rows and columns
+        const uint32_t recovery_size = (_block_count + _mix_count + 1) * _block_bytes; // +1 for temporary space
+        const uint32_t row_count = _block_count + _extra_count;
+        const uint32_t column_count = _block_count;
+
+        // Calculate size
+        uint32_t size = recovery_size + sizeof(PeelRow) * row_count
+            + sizeof(PeelColumn) * column_count + sizeof(PeelRefs) * column_count;
+        assert(size == _workspace_allocated);
+
+        // Allocate workspace
+        _recovery_blocks = new(std::nothrow) uint8_t[size];
+        if (!_recovery_blocks) goto fail;
+        memcpy(_recovery_blocks, c._recovery_blocks, _workspace_allocated);
+
+        // Set pointers
+        _peel_rows = reinterpret_cast<PeelRow *>( _recovery_blocks + recovery_size );
+        _peel_cols = reinterpret_cast<PeelColumn *>( _peel_rows + row_count );
+        _peel_col_refs = reinterpret_cast<PeelRefs *>( _peel_cols + column_count );
+    }
+
+    if (_ge_allocated) {
+        // GE matrix
+        const int ge_cols = _defer_count + _mix_count;
+        const int ge_rows = _defer_count + _dense_count + _extra_count + 1; // One extra for workspace
+        const int ge_pitch = (ge_cols + 63) / 64;
+        const uint32_t ge_matrix_words = ge_rows * ge_pitch;
+
+        // Compression matrix
+        const int compress_rows = _block_count;
+        const uint32_t compress_matrix_words = compress_rows * ge_pitch;
+
+        // Pivots
+        const int pivot_count = ge_cols + _extra_count;
+        const int pivot_words = pivot_count * 2 + ge_cols;
+
+        // Heavy
+        const int heavy_rows = CAT_HEAVY_ROWS + _extra_count;
+        const int heavy_cols = _mix_count < CAT_HEAVY_MAX_COLS ? _mix_count : CAT_HEAVY_MAX_COLS;
+        const int heavy_pitch = (heavy_cols + 3 + 3) & ~3; // Round up columns+3 to next multiple of 4
+        const int heavy_bytes = heavy_pitch * heavy_rows;
+
+        // Calculate buffer size
+        uint32_t size = ge_matrix_words * sizeof(uint64_t) + compress_matrix_words * sizeof(uint64_t) + pivot_words * sizeof(uint16_t) + heavy_bytes;
+        assert(size == _ge_allocated);
+
+        // If need to allocate more,
+        uint8_t * GF256_RESTRICT matrix = new(std::nothrow) uint8_t[size];
+        if (!matrix) goto fail;
+        _compress_matrix = reinterpret_cast<uint64_t *>( matrix );
+        memcpy(_compress_matrix, c._compress_matrix, _ge_allocated);
+
+        // Store pointers
+        _ge_pitch = ge_pitch;
+        _ge_matrix = _compress_matrix + compress_matrix_words;
+        _heavy_pitch = heavy_pitch;
+        _heavy_columns = heavy_cols;
+        _first_heavy_column = _defer_count + _mix_count - heavy_cols;
+        _heavy_matrix = reinterpret_cast<uint8_t *>( _ge_matrix + ge_matrix_words );
+        _pivots = reinterpret_cast<uint16_t *>( _heavy_matrix + heavy_bytes );
+        _ge_row_map = _pivots + pivot_count;
+        _ge_col_map = _ge_row_map + pivot_count;
+    }
+
+    return;
+fail:
+    memset(this, 0, sizeof(*this));
+}
+
 void Codec::SetInput(const void * GF256_RESTRICT message_in)
 {
     FreeInput();
@@ -5439,6 +5520,12 @@ void Codec::FreeWorkspace()
     delete[]_recovery_blocks;
     _recovery_blocks = nullptr;
     _workspace_allocated = 0;
+}
+
+void Codec::FreeDataSpecificStorage()
+{
+    FreeInput();
+    FreeWorkspace();
 }
 
 
