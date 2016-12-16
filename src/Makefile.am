@@ -21,7 +21,7 @@ endif
 
 BITCOIN_INCLUDES=-I$(builddir) $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
 
-BITCOIN_INCLUDES += -I$(srcdir)/secp256k1/include
+BITCOIN_INCLUDES += -I$(srcdir)/secp256k1/include -I$(srcdir)/wirehair/src
 BITCOIN_INCLUDES += $(UNIVALUE_CFLAGS)
 
 LIBBITCOIN_SERVER=libbitcoin_server.a
@@ -245,6 +245,17 @@ BITCOIN_CORE_H = \
   zmq/zmqpublishnotifier.h \
   zmq/zmqrpc.h
 
+FEC_H = \
+  wirehair/gf256.h \
+  wirehair/wirehair.h \
+  wirehair/WirehairCodec.h \
+  wirehair/WirehairTools.h
+
+FEC_CPP = \
+  wirehair/gf256.cpp \
+  wirehair/WirehairCodec.cpp \
+  wirehair/WirehairTools.cpp \
+  wirehair/wirehair.cpp
 
 obj/build.h: FORCE
 	@$(MKDIR_P) $(builddir)/obj
@@ -305,6 +316,8 @@ libbitcoin_server_a_SOURCES = \
   validation.cpp \
   validationinterface.cpp \
   versionbits.cpp \
+  $(FEC_CPP) \
+  $(FEC_H) \
   $(BITCOIN_CORE_H)
 
 if ENABLE_WALLET
