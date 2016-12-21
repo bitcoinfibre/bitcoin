@@ -4,11 +4,15 @@
 
 #include "fec.h"
 #include "util.h"
+#include "consensus/consensus.h"
+#include "blockencodings.h" // for MAX_CHUNK_CODED_BLOCK_SIZE_FACTOR
 
 #include <stdio.h>
 #include <string.h>
 
 #define DIV_CEIL(a, b) (((a) + (b) - 1) / (b))
+
+wh256_state wirehair_precalcs[DIV_CEIL(MAX_BLOCK_SERIALIZED_SIZE * MAX_CHUNK_CODED_BLOCK_SIZE_FACTOR, FEC_CHUNK_SIZE)];
 
 FECDecoder::FECDecoder(size_t data_size, size_t chunks_provided) :
         chunk_count(DIV_CEIL(data_size, FEC_CHUNK_SIZE)), chunks_recvd(0),
@@ -16,7 +20,8 @@ FECDecoder::FECDecoder(size_t data_size, size_t chunks_provided) :
         chunk_recvd_flags(chunks_sent) {
     if (chunk_count < 2)
         return;
-    state = wh256_decoder_init(NULL, data_size, FEC_CHUNK_SIZE);
+    assert(chunk_count < (sizeof(wirehair_precalcs) / sizeof(wh256_state))); // TODO: Is this checked in the net layer?
+    state = wh256_decoder_init(wh256_duplicate(wirehair_precalcs[chunk_count]), data_size, FEC_CHUNK_SIZE);
     assert(state);
 }
 
@@ -150,8 +155,18 @@ bool BuildFECChunks(const std::vector<unsigned char>& data, std::vector<unsigned
 
 class FECInit
 {
+    unsigned char fec_garbage[sizeof(wirehair_precalcs) / sizeof(wh256_state) * FEC_CHUNK_SIZE];
 public:
     FECInit() {
         assert(!wirehair_init());
+
+        memset(wirehair_precalcs, 0, sizeof(wirehair_precalcs));
+        memset(fec_garbage, 0x42, sizeof(fec_garbage));
+
+        for (size_t i = 1; i < sizeof(wirehair_precalcs) / sizeof(wh256_state); i++) {
+            wirehair_precalcs[i] = wh256_encoder_init(NULL, fec_garbage, (i + 1) * FEC_CHUNK_SIZE, FEC_CHUNK_SIZE);
+            assert(wirehair_precalcs[i]);
+            wh256_free_blocks(wirehair_precalcs[i]);
+        }
     }
 } instance_of_fecinit;
