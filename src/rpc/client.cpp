@@ -27,6 +27,8 @@ public:
  */
 static const CRPCConvertParam vRPCConvertParams[] =
 {
+    { "addudpnode", 3, "ultimately_trusted" },
+    { "addudpnode", 5, "group" },
     { "setmocktime", 0, "timestamp" },
     { "utxoupdatepsbt", 1, "descriptors" },
     { "generatetoaddress", 0, "nblocks" },
