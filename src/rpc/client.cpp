@@ -28,6 +28,8 @@ public:
  */
 static const CRPCConvertParam vRPCConvertParams[] =
 {
+    { "addudpnode", 3, "ultimately_trusted" },
+    { "addudpnode", 5, "group" },
     { "setmocktime", 0, "timestamp" },
     { "generate", 0, "nblocks" },
     { "generate", 1, "maxtries" },
