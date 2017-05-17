@@ -203,7 +203,11 @@
 #include "wirehair_codec_8.hpp"
 #include "gf256.h"
 
+#define FEC_CHUNK_SIZE 1152
+#define _block_bytes FEC_CHUNK_SIZE
+
 #include <new>
+#include <assert.h>
 
 
 //// Precompiler-conditional console output
@@ -4396,7 +4400,8 @@ Result Codec::ChooseMatrix(int message_bytes, int block_bytes)
     }
 
     // Calculate message block count
-    _block_bytes = block_bytes;
+    //_block_bytes = block_bytes;
+    assert(block_bytes == _block_bytes);
     _block_count = (message_bytes + _block_bytes - 1) / _block_bytes;
     _block_next_prime = NextPrime16(_block_count);
 

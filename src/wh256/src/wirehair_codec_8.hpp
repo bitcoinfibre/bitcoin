@@ -49,7 +49,7 @@
 #define CAT_HEAVY_WIN_MULT    /* Use 4-bit table and multiplication optimization (faster) */
 #define CAT_WINDOWED_BACKSUB  /* Use window optimization for back-substitution (faster) */
 #define CAT_WINDOWED_LOWERTRI /* Use window optimization for lower triangle elimination (faster) */
-#define CAT_ALL_ORIGINAL      /* Avoid doing calculations for 0 losses -- Requires CAT_COPY_FIRST_N (faster) */
+//#define CAT_ALL_ORIGINAL      /* Avoid doing calculations for 0 losses -- Requires CAT_COPY_FIRST_N (faster) */
 
 // Heavy rows:
 #define CAT_HEAVY_ROWS 6      /* Number of heavy rows to add - Tune for desired overhead / performance trade-off */
@@ -86,7 +86,7 @@ extern GF256_ALIGNED gf256_ctx GF256Ctx;
 class Codec
 {
     // Parameters
-    uint32_t _block_bytes;                      // Number of bytes in a block
+    //uint32_t _block_bytes;                      // Number of bytes in a block
     uint16_t _block_count;                      // Number of blocks in the message
     uint16_t _block_next_prime;                 // Next prime number at or above block count
     uint16_t _extra_count;                      // Number of extra rows to allocate
