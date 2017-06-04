@@ -91,9 +91,7 @@ void static inline DeleteLock(void* cs) {}
 class CCriticalSection : public AnnotatedMixin<boost::recursive_mutex>
 {
 public:
-    ~CCriticalSection() {
-        DeleteLock((void*)this);
-    }
+    ~CCriticalSection();
 };
 
 /** Wrapped boost mutex: supports waiting but not recursive locking */
