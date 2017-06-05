@@ -287,8 +287,21 @@ CBlockHeaderAndLengthShortTxIDs::CBlockHeaderAndLengthShortTxIDs(const CBlock& b
             lastprefilledindex += prefilledit->index + 1;
             prefilledit++;
             index_offset++;
-        } else
-            txlens[i - index_offset] = GetSerializeSize(TransactionCompressor(const_cast<CTransactionRef&>(block.vtx[i])), PROTOCOL_VERSION);
+        } else {
+            const CTransactionRef& tx = block.vtx[i];
+            const std::vector<unsigned char>& tx_enc = tx->GetEncodedForm();
+            if (tx_enc.size()) {
+                txlens[i - index_offset] = tx_enc.size();
+            } else {
+                // Unlike the ChunkCodedBlock constructor, below, we expect to
+                // hit this case occasionally - when a block misses a few txn
+                // and comes in over FIBRE, we won't cache the serialized tx
+                // and, thus, will have to do a serialization op here :(.
+                // (In such a case, we will skip the entire ChunkCodedBlock
+                // constructor and generate FEC from our decode result)
+                txlens[i - index_offset] = GetSerializeSize(TransactionCompressor(const_cast<CTransactionRef&>(tx)), PROTOCOL_VERSION);
+            }
+        }
     }
 }
 
@@ -366,11 +379,18 @@ ReadStatus CBlockHeaderAndLengthShortTxIDs::FillIndexOffsetMap(F& callback) cons
 struct FillIndexOffsetMapSerializer {
     VectorOutputStream& stream;
     const CBlock& block;
-    void operator()(size_t offset, size_t index) {
+    inline void operator()(size_t offset, size_t index) {
         if (stream.pos() < offset)
             stream.skip_bytes(offset - stream.pos());
         assert(stream.pos() == offset);
-        stream << TransactionCompressor(const_cast<CTransactionRef&>(block.vtx[index]));
+        const CTransactionRef& tx = block.vtx[index];
+        const std::vector<unsigned char>& tx_enc = tx->GetEncodedForm();
+        if (tx_enc.size()) {
+            stream.write((const char*)&tx_enc[0], tx_enc.size());
+        } else {
+            LogPrintf("ChunkCodedBlock::ChunkCodedBlock: FillIndexOffsetMapSerializer: tx missing encoded form cache???\n");
+            stream << TransactionCompressor(const_cast<CTransactionRef&>(tx));
+        }
     }
 };
 
