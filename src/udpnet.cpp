@@ -20,6 +20,7 @@
 #include "util.h"
 #include "utilstrencodings.h"
 #include "utiltime.h"
+#include "init.h" // for ShutdownRequested()
 
 #include <sys/socket.h>
 
@@ -82,7 +83,7 @@ static void do_send_messages(size_t group);
 static void do_read_local_messages();
 static std::atomic_bool local_read_messages_break(false);
 static void send_messages_flush_and_break();
-static void send_messages_init(const std::vector<std::pair<unsigned short, uint64_t> >& group_list, const std::pair<int64_t, std::string>& local_write_device);
+static void send_messages_init(const std::vector<std::pair<unsigned short, uint64_t> >& group_list, const std::tuple<int64_t, bool, std::string>& local_write_device);
 static void ThreadRunWriteEventLoop(size_t group) { do_send_messages(group); }
 static void ThreadRunLocalReadEventLoop() { do_read_local_messages(); }
 
@@ -93,7 +94,8 @@ static boost::thread *udp_read_thread = NULL, *udp_local_read_thread = NULL;
 static std::vector<boost::thread> udp_write_threads;
 
 static void OpenLocalDeviceConnection(bool fWrite);
-static std::pair<int64_t, std::string> get_local_device();
+static void StartLocalBackfillThread();
+static std::tuple<int64_t, bool, std::string> get_local_device();
 
 static void AddConnectionFromString(const std::string& node, bool fTrust) {
     size_t host_port_end = node.find(',');
@@ -200,8 +202,8 @@ bool InitializeUDPConnections() {
 
     // Init local write device only after udp socks were all added to read_event
     auto local_write_device = get_local_device();
-    if (local_write_device.first) {
-        int fd = open(local_write_device.second.c_str(), O_WRONLY);
+    if (std::get<0>(local_write_device)) {
+        int fd = open(std::get<2>(local_write_device).c_str(), O_WRONLY);
         if (fd < 0) {
             LogPrintf("Failed to open -fecwritedevice, not running any FIBRE connections\n");
             event_base_free(event_base_read);
@@ -229,8 +231,10 @@ bool InitializeUDPConnections() {
 
     AddConfAddedConnections();
 
-    if (local_write_device.first) {
+    if (std::get<0>(local_write_device)) {
         OpenLocalDeviceConnection(true);
+        if (std::get<1>(local_write_device))
+            StartLocalBackfillThread();
     }
 
     if (gArgs.IsArgSet("-fecreaddevice")) {
@@ -590,7 +594,9 @@ struct PerGroupMessageQueue {
     std::tuple<CService, UDPMessage, unsigned int, uint64_t> messagesPendingRingBuff[PENDING_MESSAGES_BUFF_SIZE];
     std::atomic<uint16_t> nextPendingMessage, nextUndefinedMessage;
     uint64_t bw;
-    PerGroupMessageQueue() : nextPendingMessage(0), nextUndefinedMessage(0), bw(0) {}
+    std::vector<UDPMessage> local_send_backfill_messages;
+    size_t backfill_index;
+    PerGroupMessageQueue() : nextPendingMessage(0), nextUndefinedMessage(0), bw(0), backfill_index(0) {}
     PerGroupMessageQueue(PerGroupMessageQueue&& q) { assert(false); }
 };
 static std::vector<PerGroupMessageQueue> messageQueues;
@@ -640,7 +646,7 @@ static void do_send_messages(size_t group) {
     while (true) {
         if (queue.nextUndefinedMessage == queue.nextPendingMessage) {
             std::unique_lock<std::mutex> lock(queue.send_messages_mutex);
-            while (queue.nextUndefinedMessage == queue.nextPendingMessage && !send_messages_break)
+            while (queue.nextUndefinedMessage == queue.nextPendingMessage && queue.local_send_backfill_messages.empty() && !send_messages_break)
                 queue.send_messages_wake_cv.wait(lock);
         }
         if (send_messages_break)
@@ -681,6 +687,27 @@ static void do_send_messages(size_t group) {
 
             queue.nextPendingMessage = (queue.nextPendingMessage + 1) % PENDING_MESSAGES_BUFF_SIZE;
         }
+        if (local && i == 0) {
+            std::unique_lock<std::mutex> lock(queue.send_messages_mutex);
+            if (queue.backfill_index >= queue.local_send_backfill_messages.size()) {
+                queue.local_send_backfill_messages.clear();
+                queue.backfill_index = 0;
+            } else {
+                UDPMessage& msg = queue.local_send_backfill_messages[queue.backfill_index++];
+                if ((msg.header.msg_type & UDP_MSG_TYPE_TYPE_MASK) != MSG_TYPE_BLOCK_HEADER &&
+                        (msg.header.msg_type & UDP_MSG_TYPE_TYPE_MASK) != MSG_TYPE_BLOCK_CONTENTS) {
+                    LogPrintf("UDP: Backfill tried to send non-block to local write!\n");
+                    continue;
+                }
+
+                FillChecksum(LOCAL_DEVICE_CHECKSUM_MAGIC, msg, sizeof(UDPMessage) - 1);
+                if (write(sock, &LOCAL_MAGIC_BYTES, sizeof(LOCAL_MAGIC_BYTES)) != sizeof(LOCAL_MAGIC_BYTES) ||
+                        write(sock, &msg, sizeof(UDPMessage) - 1) != sizeof(UDPMessage) - 1) {
+                    //TODO: Handle?
+                }
+                i++;
+            }
+        }
 
         uint64_t sleep_time = 1000*1000 * PACKET_SIZE * i / target_bytes_per_sec;
         uint64_t run_time = std::chrono::duration_cast<std::chrono::duration<uint64_t, std::chrono::microseconds::period> >(std::chrono::steady_clock::now() - start).count();
@@ -689,31 +716,89 @@ static void do_send_messages(size_t group) {
     }
 }
 
-static std::pair<int64_t, std::string> get_local_device() {
+static void StartLocalBackfillThread() {
+    assert(LOCAL_SEND_GROUP < messageQueues.size());
+    boost::thread(boost::bind(&TraceThread<boost::function<void ()> >, "udpbackfill", [] {
+        while (IsInitialBlockDownload() && !send_messages_break)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+        const CBlockIndex *lastBlock;
+        {
+            LOCK(cs_main);
+            lastBlock = chainActive.Tip()->pprev;
+            assert(lastBlock);
+        }
+
+        PerGroupMessageQueue& queue = messageQueues[LOCAL_SEND_GROUP];
+        while (!send_messages_break) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            bool should_generate = false;
+            {
+                std::unique_lock<std::mutex> lock(queue.send_messages_mutex);
+                should_generate = queue.local_send_backfill_messages.empty();
+            }
+            if (should_generate) {
+                int height;
+                {
+                    LOCK(cs_main);
+                    height = lastBlock->nHeight + 1;
+                    lastBlock = chainActive[height];
+                    if (!lastBlock || lastBlock->nHeight < chainActive.Height() - 24 * 6) {
+                        height = chainActive.Height() - 24 * 6;
+                        lastBlock = chainActive[height];
+                    }
+                }
+
+                LogPrint(BCLog::UDPNET, "UDP: Building backfill block at height %d with hash %s\n", height, lastBlock->phashBlock->ToString());
+
+                CBlock block;
+                assert(ReadBlockFromDisk(block, lastBlock, Params().GetConsensus()));
+                std::vector<UDPMessage> msgs;
+                UDPFillMessagesFromBlock(block, msgs);
+
+                std::unique_lock<std::mutex> lock(queue.send_messages_mutex);
+                queue.local_send_backfill_messages = std::move(msgs);
+                lock.unlock();
+                queue.send_messages_wake_cv.notify_all();
+            }
+        }
+    })).detach();
+}
+
+static std::tuple<int64_t, bool, std::string> get_local_device() {
     std::string localUDPWriteDevice(gArgs.GetArg("-fecwritedevice", ""));
 
     if (localUDPWriteDevice == "")
-        return std::make_pair((int64_t)0, std::string());
+        return std::make_tuple((int64_t)0, false, std::string());
 
     size_t bw_end = localUDPWriteDevice.find(',');
-    if (bw_end == std::string::npos) {
-        LogPrintf("Failed to parse -fecwritedevice=bw,file option, not writing\n");
-        return std::make_pair((int64_t)0, std::string());
+    size_t backfill_end = localUDPWriteDevice.find(',', bw_end + 1);
+
+    if (bw_end == std::string::npos || backfill_end == std::string::npos) {
+        LogPrintf("Failed to parse -fecwritedevice=bw,backfill,file option, not writing\n");
+        return std::make_tuple((int64_t)0, false, std::string());
+    }
+
+    std::string backfill_str(localUDPWriteDevice.substr(bw_end + 1, backfill_end - bw_end - 1));
+    if (backfill_str != "true" && backfill_str != "false") {
+        LogPrintf("-fecwritedevice=bw,backfill,file backfill option must be true or false, not writing\n");
+        return std::make_tuple((int64_t)0, false, std::string());
     }
 
     int64_t bw = atoi64(localUDPWriteDevice.substr(0, bw_end));
-    localUDPWriteDevice = localUDPWriteDevice.substr(bw_end + 1);
+    bool backfill = backfill_str == "true";
+    localUDPWriteDevice = localUDPWriteDevice.substr(backfill_end + 1);
 
-    return std::make_pair(bw, localUDPWriteDevice);
+    return std::make_tuple(bw, backfill, localUDPWriteDevice);
 }
 
-static void send_messages_init(const std::vector<std::pair<unsigned short, uint64_t> >& group_list, const std::pair<int64_t, std::string>& local_write_device) {
-    messageQueues.resize(group_list.size() + (local_write_device.first ? 1 : 0));
+static void send_messages_init(const std::vector<std::pair<unsigned short, uint64_t> >& group_list, const std::tuple<int64_t, bool, std::string>& local_write_device) {
+    messageQueues.resize(group_list.size() + (std::get<0>(local_write_device) ? 1 : 0));
     for (size_t i = 0; i < group_list.size(); i++)
         messageQueues[i].bw = group_list[i].second;
-    if (local_write_device.first) {
+    if (std::get<0>(local_write_device)) {
         LOCAL_SEND_GROUP = group_list.size();
-        messageQueues[LOCAL_SEND_GROUP].bw = local_write_device.first;
+        messageQueues[LOCAL_SEND_GROUP].bw = std::get<0>(local_write_device);
         last_sock_is_local = true;
     } else {
         last_sock_is_local = false;

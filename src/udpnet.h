@@ -97,4 +97,6 @@ void SendMessage(const UDPMessage& msg, const unsigned int length, const CServic
 void SendMessage(const UDPMessage& msg, const unsigned int length, const std::map<CService, UDPConnectionState>::const_iterator& node);
 void DisconnectNode(const std::map<CService, UDPConnectionState>::iterator& it);
 
+void UDPFillMessagesFromBlock(const CBlock& block, std::vector<UDPMessage>& msgs);
+
 #endif
