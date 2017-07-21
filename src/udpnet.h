@@ -68,6 +68,7 @@ struct UDPConnectionInfo {
     uint64_t remote_magic; // Already LE
     size_t group;
     bool fTrusted;
+    UDPConnectionType connection_type;
 };
 
 struct UDPConnectionState {
@@ -90,6 +91,7 @@ struct UDPConnectionState {
 
 extern std::recursive_mutex cs_mapUDPNodes;
 extern std::map<CService, UDPConnectionState> mapUDPNodes;
+extern bool maybe_have_write_nodes;
 
 void SendMessage(const UDPMessage& msg, const unsigned int length, const CService& service, const uint64_t magic, size_t group);
 void SendMessage(const UDPMessage& msg, const unsigned int length, const std::map<CService, UDPConnectionState>::const_iterator& node);
