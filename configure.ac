@@ -179,9 +179,9 @@ AC_ARG_ENABLE([glibc-back-compat],
 
 AC_ARG_ENABLE([experimental-asm],
   [AS_HELP_STRING([--enable-experimental-asm],
-  [Enable experimental assembly routines (default is no)])],
+  [Enable experimental assembly routines (default is yes)])],
   [experimental_asm=$enableval],
-  [experimental_asm=no])
+  [experimental_asm=yes])
 
 if test "x$experimental_asm" = xyes; then
   AC_DEFINE(EXPERIMENTAL_ASM, 1, [Define this symbol to build in experimental assembly routines])
@@ -258,6 +258,9 @@ if test "x$CXXFLAGS_overridden" = "xno"; then
   AX_CHECK_COMPILE_FLAG([-Wunused-local-typedef],[CXXFLAGS="$CXXFLAGS -Wno-unused-local-typedef"],,[[$CXXFLAG_WERROR]])
   AX_CHECK_COMPILE_FLAG([-Wdeprecated-register],[CXXFLAGS="$CXXFLAGS -Wno-deprecated-register"],,[[$CXXFLAG_WERROR]])
   AX_CHECK_COMPILE_FLAG([-Wimplicit-fallthrough],[CXXFLAGS="$CXXFLAGS -Wno-implicit-fallthrough"],,[[$CXXFLAG_WERROR]])
+
+  # Need this for wh256, but this is really not what we should be doing...
+  AX_CHECK_COMPILE_FLAG([-march=native],[[CXXFLAGS="$CXXFLAGS -march=native"]],,[[$CXXFLAG_WERROR]])
 fi
 
 # Check for optional instruction set support. Enabling these does _not_ imply that all code will
