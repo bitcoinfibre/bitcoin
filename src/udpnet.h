@@ -83,8 +83,12 @@ struct UDPConnectionState {
     std::map<uint64_t, int64_t> ping_times;
     double last_pings[10];
     unsigned int last_ping_location;
+    // for speed calculations (mbps)
+    int64_t rcvdBytes;
+    int64_t lastAvgTime;
 
-    UDPConnectionState() : connection({}), state(0), protocolVersion(0), lastSendTime(0), lastRecvTime(0), lastPingTime(0), last_ping_location(0)
+    UDPConnectionState() : connection({}), state(0), protocolVersion(0), lastSendTime(0), lastRecvTime(0), lastPingTime(0), last_ping_location(0),
+        rcvdBytes(0), lastAvgTime(0)
         { for (size_t i = 0; i < sizeof(last_pings) / sizeof(double); i++) last_pings[i] = -1; }
 };
 #define PROTOCOL_VERSION_MIN(ver) (((ver) >> 16) & 0xffff)

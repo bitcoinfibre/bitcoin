@@ -511,6 +511,28 @@ static void do_read_local_messages() {
 
             state.lastRecvTime = GetTimeMillis();
 
+            /* update bytes stat
+             * for speed calculations (mbps)
+             * example:
+             *  ./bitcoind -fecreaddevice=/tmp/async_rx -fecstat=60
+             */
+            if (gArgs.IsArgSet("-fecstat")) {
+                int avgInterval = atoi(gArgs.GetArg("-fecstat", ""));
+                if (avgInterval <= 0) // invalid argument specified
+                    break;
+                if (!state.lastAvgTime)
+                    state.lastAvgTime = GetTimeMillis();
+                state.rcvdBytes += sizeof(UDPMessage) - 1;
+                int64_t timeDelta = GetTimeMillis() - state.lastAvgTime;
+                if (timeDelta > 1000*avgInterval) {
+                    // print statistics
+                    LogPrintf("UDP[%d]: Average speed %.4f Mbit/sec\n",
+                            fd, (double)state.rcvdBytes*8*1000/(1024*1024*timeDelta));
+                    state.lastAvgTime = GetTimeMillis();
+                    state.rcvdBytes = 0;
+                }
+            }
+
             const uint8_t msg_type_masked = (msg.header.msg_type & UDP_MSG_TYPE_TYPE_MASK);
             if (msg_type_masked == MSG_TYPE_BLOCK_HEADER || msg_type_masked == MSG_TYPE_BLOCK_CONTENTS || msg_type_masked == MSG_TYPE_TX_CONTENTS) {
                 if (!HandleBlockTxMessage(msg, sizeof(UDPMessage) - 1, it->first, it->second, start)) {
