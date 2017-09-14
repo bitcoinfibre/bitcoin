@@ -34,6 +34,9 @@ public:
     UniValue(bool val_) {
         setBool(val_);
     }
+    UniValue(unsigned int val_) {
+        setInt(val_);
+    }
     UniValue(int val_) {
         setInt(val_);
     }
@@ -56,6 +59,7 @@ public:
     bool setNumStr(const std::string& val);
     bool setInt(uint64_t val);
     bool setInt(int64_t val);
+    bool setInt(unsigned int val_) { return setInt((uint64_t)val_); }
     bool setInt(int val_) { return setInt((int64_t)val_); }
     bool setFloat(double val);
     bool setStr(const std::string& val);
@@ -131,6 +135,10 @@ public:
     }
     bool pushKV(const std::string& key, bool val_) {
         UniValue tmpVal((bool)val_);
+        return pushKV(key, tmpVal);
+    }
+    bool pushKV(const std::string& key, unsigned int val_) {
+        UniValue tmpVal((uint64_t)val_);
         return pushKV(key, tmpVal);
     }
     bool pushKV(const std::string& key, int val_) {
