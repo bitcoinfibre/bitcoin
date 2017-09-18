@@ -36,7 +36,7 @@ private:
     hasher m_hash_instance;
     key_equal m_equal_instance;
     IsKeyNull m_null_instance;
-    const size_type m_bits;
+    size_type m_bits;
     // With 1/4 chance of a bucket being full, this means 1 in 2^40 of this
     // many in a row.
     static const int scan_max = 20;
@@ -58,10 +58,21 @@ private:
     }
 
 public:
+    open_hash_set() : m_bits(1) {} // dummy, dont use an object constructed like this!
+
     open_hash_set(size_type entry_count) :
         m_bits(optimal_hashbits(entry_count)),
         m_table(1ULL << m_bits)
     {}
+
+    open_hash_set(open_hash_set&& other) { *this = std::move(other); }
+
+    open_hash_set& operator=(open_hash_set&& other) {
+        m_bits  = other.m_bits;
+        m_table = std::move(other.m_table);
+        m_count = other.m_count;
+        return *this;
+    }
 
     std::pair<iterator, bool> insert(const value_type& value) {
         size_t pos = hash_base(m_hash_instance(value));
