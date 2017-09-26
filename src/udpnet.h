@@ -29,6 +29,7 @@ enum UDPMessageType {
     MSG_TYPE_BLOCK_CONTENTS = 4,
     MSG_TYPE_PING = 5,
     MSG_TYPE_PONG = 6,
+    MSG_TYPE_TX_CONTENTS = 7,
 };
 
 static const uint8_t UDP_MSG_TYPE_FLAGS_MASK = 0b11000000;
@@ -42,6 +43,7 @@ struct __attribute__((packed)) UDPMessageHeader {
 static_assert(sizeof(UDPMessageHeader) == 17, "__attribute__((packed)) must work");
 
 // Message body cannot exceed 1167 bytes (1185 bytes in total UDP message contents, with a padding byte in message)
+// Local send logic assumes this to be the size of block data packets in a few places!
 #define MAX_UDP_MESSAGE_LENGTH 1167
 
 struct __attribute__((packed)) UDPMessage {

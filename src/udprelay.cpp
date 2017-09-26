@@ -8,6 +8,14 @@ void UDPRelayBlock(const CBlock& block) {
 
 }
 
+void UDPFillMessagesFromTx(const CTransaction& tx, std::vector<UDPMessage>& msgs) {
+    msgs.clear();
+}
+
+void UDPFillMessagesFromBlock(const CBlock& block, std::vector<UDPMessage>& msgs) {
+    msgs.clear();
+}
+
 void BlockRecvInit() {
 
 }
