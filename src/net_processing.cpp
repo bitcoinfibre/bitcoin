@@ -2733,6 +2733,17 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             return true;
         }
 
+        if (IsWitnessEnabled(pindex->pprev, chainparams.GetConsensus()) && !nodestate->fWantsCmpctWitness) {
+            // Due to a bug in fibrenetworkclient, we have to fall back to
+            // regular block requests here...I've been trying to get people
+            // off of it now that most folks have upgraded to 0.14+, but a
+            // few still remain :(
+            std::vector<CInv> vInv(1);
+            vInv[0] = CInv(MSG_BLOCK | GetFetchFlags(pfrom), cmpctblock.header.GetHash());
+            connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::GETDATA, vInv));
+            return true;
+        }
+
         // We want to be a bit conservative just to be extra careful about DoS
         // possibilities in compact block processing...
         if (pindex->nHeight <= ::ChainActive().Height() + 2) {
