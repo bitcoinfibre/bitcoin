@@ -128,18 +128,19 @@ ReadStatus PartiallyDownloadedBlock::InitData(const CBlockHeaderAndShortTxIDs& c
     std::vector<bool> have_txn(txn_available.size());
     {
     LOCK(pool->cs);
-    const std::vector<std::pair<uint256, CTxMemPool::txiter> >& vTxHashes = pool->vTxHashes;
-    uint64_t shortid = vTxHashes.size() > 0 ? cmpctblock.GetShortID(vTxHashes[0].first) : 0;
+    const std::vector<uint256>& vTxHashes = pool->vTxHashes;
+    const std::vector<CTxMemPool::txiter>& vTxnUnordered = pool->vTxnUnordered;
+    uint64_t shortid = vTxHashes.size() > 0 ? cmpctblock.GetShortID(vTxHashes[0]) : 0;
     for (size_t i = 0; i < vTxHashes.size(); i++) {
         uint64_t next_shortid = 0;
         __builtin_prefetch(vTxHashes.data() + ((i + 2) * sizeof(decltype(pool->vTxHashes)::value_type)), 0);
         if (i + 1 < vTxHashes.size()) {
-            next_shortid = cmpctblock.GetShortID(vTxHashes[i + 1].first);
+            next_shortid = cmpctblock.GetShortID(vTxHashes[i + 1]);
         }
         const ShortIdIndexPair *p = shorttxids.find_fast(ShortIdIndexPair(shortid));
         if (p) {
             if (!have_txn[p->index]) {
-                txn_available[p->index] = vTxHashes[i].second->GetSharedTx();
+                txn_available[p->index] = vTxnUnordered[i]->GetSharedTx();
                 have_txn[p->index] = true;
                 mempool_count++;
             } else {
