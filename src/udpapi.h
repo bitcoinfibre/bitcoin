@@ -15,9 +15,15 @@ std::vector<std::pair<unsigned short, uint64_t> > GetUDPInboundPorts(); // port,
 bool InitializeUDPConnections();
 void StopUDPConnections();
 
+enum UDPConnectionType {
+    UDP_CONNECTION_TYPE_NORMAL,
+    UDP_CONNECTION_TYPE_OUTBOUND_ONLY,
+    UDP_CONNECTION_TYPE_INBOUND_ONLY,
+};
+
 // fUltimatelyTrusted means you trust them (ie whitelist) and ALL OF THEIR SUBSEQUENT WHITELISTED PEERS
-void OpenUDPConnectionTo(const CService& remote_addr, uint64_t local_magic, uint64_t remote_magic, bool fUltimatelyTrusted, size_t group = 0);
-void OpenPersistentUDPConnectionTo(const CService& remote_addr, uint64_t local_magic, uint64_t remote_magic, bool fUltimatelyTrusted, size_t group = 0);
+void OpenUDPConnectionTo(const CService& remote_addr, uint64_t local_magic, uint64_t remote_magic, bool fUltimatelyTrusted, UDPConnectionType connection_type = UDP_CONNECTION_TYPE_NORMAL, size_t group = 0);
+void OpenPersistentUDPConnectionTo(const CService& remote_addr, uint64_t local_magic, uint64_t remote_magic, bool fUltimatelyTrusted, UDPConnectionType connection_type = UDP_CONNECTION_TYPE_NORMAL, size_t group = 0);
 
 void CloseUDPConnectionTo(const CService& remote_addr);
 
