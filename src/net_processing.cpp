@@ -3844,7 +3844,7 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
             if (pto->m_tx_relay != nullptr) {
                 LOCK(pto->m_tx_relay->cs_tx_inventory);
                 // Check whether periodic sends should happen
-                bool fSendTrickle = pto->HasPermission(PF_NOBAN);
+                bool fSendTrickle = pto->HasPermission(PF_NOBAN) | pto->m_connect_arg;
                 if (pto->m_tx_relay->nNextInvSend < nNow) {
                     fSendTrickle = true;
                     if (pto->fInbound) {
