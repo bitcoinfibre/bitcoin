@@ -165,13 +165,15 @@ public:
         READWRITE(COMPACTSIZE(shorttxids_size));
         if (ser_action.ForRead()) {
             size_t i = 0;
+            shorttxids.clear();
             while (shorttxids.size() < shorttxids_size) {
-                shorttxids.resize(std::min((uint64_t)(5000 + shorttxids.size()), shorttxids_size));
-                for (; i < shorttxids.size(); i++) {
+                size_t target = std::min((uint64_t)(5000 + shorttxids.size()), shorttxids_size);
+                shorttxids.reserve(target);
+                for (; i < target; i++) {
                     uint32_t lsb = 0; uint16_t msb = 0;
                     READWRITE(lsb);
                     READWRITE(msb);
-                    shorttxids[i] = (uint64_t(msb) << 32) | uint64_t(lsb);
+                    shorttxids.emplace_back((uint64_t(msb) << 32) | uint64_t(lsb));
                     static_assert(SHORTTXIDS_LENGTH == 6, "shorttxids serialization assumes 6-byte shorttxids");
                 }
             }
