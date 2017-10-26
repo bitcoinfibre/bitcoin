@@ -288,6 +288,7 @@ void Shutdown(InitInterfaces& interfaces)
     GetMainSignals().UnregisterWithMempoolSignals(mempool);
     globalVerifyHandle.reset();
     ECC_Stop();
+    StopDebugLogFlushThread();
     LogPrintf("%s: done\n", __func__);
 }
 

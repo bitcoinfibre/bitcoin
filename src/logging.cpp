@@ -11,6 +11,65 @@
 
 const char * const DEFAULT_DEBUGLOGFILE = "debug.log";
 
+
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+#define LOG_LINE_BUFFER_SIZE 128
+static std::atomic_int g_next_pending_log_line(0);
+static std::atomic_int g_next_undef_log_line(0);
+static std::atomic_bool g_debug_log_flush_thread_exit;
+static std::mutex g_log_buff_mutex;
+static std::condition_variable g_log_buff_cv;
+static std::array<std::string, LOG_LINE_BUFFER_SIZE> g_debug_log_buff;
+static std::unique_ptr<std::thread> g_buff_flush_thread; // non-ptr fails to build in LTO?
+
+static FILE* fileout;
+static std::vector<FILE*> close_files;
+
+static void DebugLogFlush()
+{
+    while (true) {
+        int next_pending_log = g_next_pending_log_line.load(std::memory_order_acquire);
+        int next_undef_log = g_next_undef_log_line.load(std::memory_order_acquire);
+        if (next_pending_log == next_undef_log) {
+            if (g_debug_log_flush_thread_exit) return;
+            std::unique_lock<std::mutex> lock(g_log_buff_mutex);
+            while (next_pending_log == next_undef_log && !g_debug_log_flush_thread_exit) {
+                while (!close_files.empty()) {
+                    fclose(close_files.back());
+                    close_files.pop_back();
+                }
+                g_log_buff_cv.wait(lock);
+                next_pending_log = g_next_pending_log_line.load(std::memory_order_acquire);
+                next_undef_log = g_next_undef_log_line.load(std::memory_order_acquire);
+            }
+        }
+
+        while (next_pending_log != next_undef_log) {
+            fwrite(g_debug_log_buff[next_pending_log].data(), 1, g_debug_log_buff[next_pending_log].size(), fileout);
+            g_debug_log_buff[next_pending_log].clear();
+            g_debug_log_buff[next_pending_log].shrink_to_fit();
+            next_pending_log = (next_pending_log + 1) % LOG_LINE_BUFFER_SIZE;
+            g_next_pending_log_line.store(next_pending_log, std::memory_order_release);
+            g_log_buff_cv.notify_one();
+        }
+    }
+}
+
+void StopDebugLogFlushThread() {
+    g_debug_log_flush_thread_exit = true;
+    {
+        std::unique_lock<std::mutex> lock(g_log_buff_mutex);
+        g_log_buff_cv.notify_all();
+    }
+    if (g_buff_flush_thread) {
+        g_buff_flush_thread->join();
+        g_buff_flush_thread.reset();
+    }
+}
+
 BCLog::Logger& LogInstance()
 {
 /**
@@ -36,7 +95,25 @@ bool fLogIPs = DEFAULT_LOGIPS;
 
 static int FileWriteStr(const std::string &str, FILE *fp)
 {
-    return fwrite(str.data(), 1, str.size(), fp);
+    std::unique_lock<std::mutex> lock(g_log_buff_mutex);
+    if (g_debug_log_flush_thread_exit) {
+        return fwrite(str.data(), 1, str.size(), fp);
+    }
+    if (!g_buff_flush_thread) {
+        g_buff_flush_thread.reset(new std::thread(DebugLogFlush));
+    }
+    int next_pending_log = g_next_pending_log_line.load(std::memory_order_acquire);
+    int next_undef_log = g_next_undef_log_line.load(std::memory_order_acquire);
+    while (next_pending_log == (next_undef_log + 1) % LOG_LINE_BUFFER_SIZE && !g_debug_log_flush_thread_exit) {
+        g_log_buff_cv.wait(lock);
+        next_pending_log = g_next_pending_log_line.load(std::memory_order_acquire);
+        next_undef_log = g_next_undef_log_line.load(std::memory_order_acquire);
+    }
+    g_debug_log_buff[next_undef_log] = str;
+    fileout = fp;
+    g_next_undef_log_line.store((next_undef_log + 1) % LOG_LINE_BUFFER_SIZE, std::memory_order_release);
+    g_log_buff_cv.notify_all();
+    return str.size();
 }
 
 bool BCLog::Logger::StartLogging()
@@ -79,7 +156,7 @@ void BCLog::Logger::DisconnectTestLogger()
 {
     std::lock_guard<std::mutex> scoped_lock(m_cs);
     m_buffering = true;
-    if (m_fileout != nullptr) fclose(m_fileout);
+    if (m_fileout != nullptr) { StopDebugLogFlushThread(); fclose(m_fileout); }
     m_fileout = nullptr;
 }
 
@@ -259,7 +336,8 @@ void BCLog::Logger::LogPrintStr(const std::string& str)
             FILE* new_fileout = fsbridge::fopen(m_file_path, "a");
             if (new_fileout) {
                 setbuf(new_fileout, nullptr); // unbuffered
-                fclose(m_fileout);
+                std::unique_lock<std::mutex> lock(g_log_buff_mutex);
+                close_files.push_back(m_fileout);
                 m_fileout = new_fileout;
             }
         }
