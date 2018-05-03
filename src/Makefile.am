@@ -247,12 +247,14 @@ BITCOIN_CORE_H = \
 
 FEC_H = \
   wirehair/gf256.h \
+  wirehair/cm256.h \
   wirehair/wirehair.h \
   wirehair/WirehairCodec.h \
   wirehair/WirehairTools.h
 
 FEC_CPP = \
   wirehair/gf256.cpp \
+  wirehair/cm256.cpp \
   wirehair/WirehairCodec.cpp \
   wirehair/WirehairTools.cpp \
   wirehair/wirehair.cpp
