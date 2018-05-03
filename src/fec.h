@@ -11,8 +11,10 @@
 #include <vector>
 
 #define FEC_CHUNK_SIZE 1152
+#define CM256_MAX_CHUNKS 27
 
 #include "wirehair/wirehair.h"
+#include "wirehair/cm256.h"
 #include "random.h"
 #include "open_hash_set.h"
 
@@ -69,6 +71,10 @@ private:
     int32_t cm256_start_idx = -1;
     FastRandomContext rand;
 
+    // Used only in cm256 mode:
+    FECChunkType tmp_chunk;
+    cm256_block cm256_blocks[CM256_MAX_CHUNKS];
+
 public:
     // dataIn/fec_chunksIn must not change during lifetime of this object
     // fec_chunks->second[i] must be 0 for all i!
@@ -93,9 +99,17 @@ class FECDecoder {
 private:
     FECChunkType tmp_chunk;
     size_t chunk_count, chunks_recvd;
-    BlockChunkRecvdTracker chunk_tracker;
     mutable bool decodeComplete;
-    WirehairCodec state = NULL;
+    BlockChunkRecvdTracker chunk_tracker;
+
+    // Only used in wirehair mode:
+    WirehairCodec state = nullptr;
+
+    // Only used in cm256 mode:
+    std::vector<FECChunkType> cm256_chunks;
+    cm256_block cm256_blocks[CM256_MAX_CHUNKS];
+    bool cm256_decoded = false;
+
     friend FECEncoder::FECEncoder(FECDecoder&& decoder, const std::vector<unsigned char>* dataIn, std::pair<std::unique_ptr<FECChunkType[]>, std::vector<uint32_t>>* fec_chunksIn);
 
 public:
