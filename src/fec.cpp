@@ -3,7 +3,10 @@
 // distributed under the Affero General Public License (AGPL v3)
 
 #include "fec.h"
+#include "consensus/consensus.h" // for MAX_BLOCK_SERIALIZED_SIZE
+#include "blockencodings.h" // for MAX_CHUNK_CODED_BLOCK_SIZE_FACTOR
 
+#include <atomic>
 #include <algorithm>
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +15,27 @@
 
 #define FEC_CHUNK_COUNT_MAX (1 << 24)
 #define CHUNK_COUNT_USES_CM256(chunks) ((chunks) <= CM256_MAX_CHUNKS)
+
+#define CACHE_STATES_COUNT 5
+static std::atomic<WirehairCodec> cache_states[CACHE_STATES_COUNT];
+static inline WirehairCodec get_wirehair_codec() {
+    for (size_t i = 0; i < CACHE_STATES_COUNT; i++) {
+        WirehairCodec state = cache_states[i].exchange(nullptr);
+        if (state) {
+            return state;
+        }
+    }
+    return nullptr;
+}
+static inline void return_wirehair_codec(WirehairCodec state) {
+    WirehairCodec null_state = nullptr;
+    for (size_t i = 0; i < CACHE_STATES_COUNT; i++) {
+        if (cache_states[i].compare_exchange_weak(null_state, state)) {
+            return;
+        }
+    }
+    wirehair_free(state);
+}
 
 BlockChunkRecvdTracker::BlockChunkRecvdTracker(size_t chunk_count) :
         data_chunk_recvd_flags(CHUNK_COUNT_USES_CM256(chunk_count) ? 0xff : chunk_count),
@@ -32,7 +56,7 @@ FECDecoder::FECDecoder(size_t data_size) :
     if (CHUNK_COUNT_USES_CM256(chunk_count)) {
         cm256_chunks.reserve(chunk_count);
     } else {
-        state = wirehair_decoder_create(NULL, data_size, FEC_CHUNK_SIZE);
+        state = wirehair_decoder_create(get_wirehair_codec(), data_size, FEC_CHUNK_SIZE);
         assert(state);
     }
 }
@@ -59,7 +83,7 @@ FECDecoder& FECDecoder::operator=(FECDecoder&& decoder) {
 
 FECDecoder::~FECDecoder() {
     if (state)
-        wirehair_free(state);
+        return_wirehair_codec(state);
 }
 
 bool FECDecoder::ProvideChunk(const unsigned char* chunk, uint32_t chunk_id) {
@@ -148,7 +172,7 @@ FECEncoder::FECEncoder(const std::vector<unsigned char>* dataIn, std::pair<std::
             cm256_blocks[chunk_count - 1] = cm256_block { &tmp_chunk, (uint8_t)(chunk_count - 1) };
         }
     } else {
-        state = wirehair_encoder_create(NULL, data->data(), data->size(), FEC_CHUNK_SIZE);
+        state = wirehair_encoder_create(get_wirehair_codec(), data->data(), data->size(), FEC_CHUNK_SIZE);
         assert(state);
     }
 }
@@ -186,7 +210,7 @@ FECEncoder::FECEncoder(FECDecoder&& decoder, const std::vector<unsigned char>* d
 
 FECEncoder::~FECEncoder() {
     if (state)
-        wirehair_free(state);
+        return_wirehair_codec(state);
 }
 
 bool FECEncoder::BuildChunk(size_t vector_idx) {
@@ -249,5 +273,8 @@ public:
     FECInit() {
         assert(!wirehair_init());
         assert(!cm256_init());
+        for (size_t i = 0; i < CACHE_STATES_COUNT; i++) {
+            cache_states[i] = wirehair_decoder_create(nullptr, MAX_BLOCK_SERIALIZED_SIZE * MAX_CHUNK_CODED_BLOCK_SIZE_FACTOR, FEC_CHUNK_SIZE);
+        }
     }
 } instance_of_fecinit;
