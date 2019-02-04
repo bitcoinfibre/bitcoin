@@ -222,6 +222,7 @@ libbitcoin_server_a_SOURCES = \
   net.cpp \
   net_processing.cpp \
   noui.cpp \
+  outoforder.cpp \
   policy/fees.cpp \
   policy/policy.cpp \
   policy/rbf.cpp \

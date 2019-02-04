@@ -1559,6 +1559,8 @@ bool AppInitMain()
             }
 
             fLoaded = true;
+
+            CheckForOoOBlocks(chainparams);
         } while(false);
 
         if (!fLoaded && !fRequestShutdown) {

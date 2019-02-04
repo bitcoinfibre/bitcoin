@@ -505,6 +505,7 @@ static void ProcessBlockThread() {
             return;
         // To avoid vector re-allocation we pop_back, so its secretly a stack, shhhhh, dont tell anyone
         std::pair<std::pair<uint64_t, CService>, std::shared_ptr<PartialBlockData> > process_block = block_process_queue.back();
+        CService& node = process_block.first.second;
         PartialBlockData& block = *process_block.second;
         block_process_queue.pop_back();
         process_lock.unlock();
@@ -535,11 +536,11 @@ static void ProcessBlockThread() {
                 } catch (std::ios_base::failure& e) {
                     lock.unlock();
                     std::lock_guard<std::recursive_mutex> udpNodesLock(cs_mapUDPNodes);
-                    if (process_block.first.second == TRUSTED_PEER_DUMMY)
+                    if (node == TRUSTED_PEER_DUMMY)
                         LogPrintf("UDP: Failed to decode received header and short txids from trusted peer(s), check your trusted peers are behaving well.\n");
                     else {
-                        LogPrintf("UDP: Failed to decode received header and short txids from %s, disconnecting\n", process_block.first.second.ToString());
-                        const auto it = mapUDPNodes.find(process_block.first.second);
+                        LogPrintf("UDP: Failed to decode received header and short txids from %s, disconnecting\n", node.ToString());
+                        const auto it = mapUDPNodes.find(node);
                         if (it != mapUDPNodes.end())
                             DisconnectNode(it);
                     }
@@ -554,11 +555,11 @@ static void ProcessBlockThread() {
                     lock.unlock();
                     std::lock_guard<std::recursive_mutex> udpNodesLock(cs_mapUDPNodes);
                     if (decode_status == READ_STATUS_INVALID) {
-                        if (process_block.first.second == TRUSTED_PEER_DUMMY)
+                        if (node == TRUSTED_PEER_DUMMY)
                             LogPrintf("UDP: Got invalid header and short txids from trusted peer(s), check your trusted peers are behaving well.\n");
                         else {
-                            LogPrintf("UDP: Got invalid header and short txids from %s, disconnecting\n", process_block.first.second.ToString());
-                            const auto it = mapUDPNodes.find(process_block.first.second);
+                            LogPrintf("UDP: Got invalid header and short txids from %s, disconnecting\n", node.ToString());
+                            const auto it = mapUDPNodes.find(node);
                             if (it != mapUDPNodes.end())
                                 DisconnectNode(it);
                         }
@@ -617,10 +618,10 @@ static void ProcessBlockThread() {
                     std::lock_guard<std::recursive_mutex> udpNodesLock(cs_mapUDPNodes);
 
                     if (status == READ_STATUS_INVALID) {
-                        if (process_block.first.second == TRUSTED_PEER_DUMMY)
+                        if (node == TRUSTED_PEER_DUMMY)
                             LogPrintf("UDP: Unable to decode block from trusted peer(s), check your trusted peers are behaving well.\n");
                         else {
-                            const auto it = mapUDPNodes.find(process_block.first.second);
+                            const auto it = mapUDPNodes.find(node);
                             if (it != mapUDPNodes.end())
                                 DisconnectNode(it);
                         }
@@ -651,14 +652,29 @@ static void ProcessBlockThread() {
 
                     bool fNewBlock;
                     if (!ProcessNewBlock(Params(), pdecoded_block, false, &fNewBlock)) {
-                        bool have_prev;
+                        bool have_prev, save_block_for_later;
                         {
                             LOCK(cs_main);
                             have_prev = mapBlockIndex.count(pdecoded_block->hashPrevBlock);
+
+                            if (have_prev) {
+                                save_block_for_later = false;
+                            } else {
+                                // Only save blocks from the local receive group
+                                save_block_for_later = IsNodeLocalReceive(node);
+                            }
+                            if (save_block_for_later) {
+                                // Only save blocks that are at least minimally valid
+                                CValidationState state;
+                                save_block_for_later = CheckBlock(*pdecoded_block, state, Params().GetConsensus());
+                            }
+                            if (save_block_for_later) {
+                                save_block_for_later = StoreOoOBlock(Params(), pdecoded_block);
+                            }
                         }
                         LogPrintf("UDP: Failed to decode block %s\n", decoded_block.GetHash().ToString());
                         std::lock_guard<std::recursive_mutex> udpNodesLock(cs_mapUDPNodes);
-                        if (have_prev) {
+                        if (have_prev || save_block_for_later) {
                             setBlocksReceived.insert(process_block.first);
                         } else {
                             // Allow re-downloading again later, useful for local backfill downloads
@@ -696,11 +712,11 @@ static void ProcessBlockThread() {
                         lock.unlock();
                         std::lock_guard<std::recursive_mutex> udpNodesLock(cs_mapUDPNodes);
                         if (res == READ_STATUS_INVALID) {
-                            if (process_block.first.second == TRUSTED_PEER_DUMMY)
+                            if (node == TRUSTED_PEER_DUMMY)
                                 LogPrintf("UDP: Unable to process mempool for block %s from trusted peer(s), check your trusted peers are behaving well.\n", blockHash.ToString());
                             else {
-                                LogPrintf("UDP: Unable to process mempool for block %s from %s, disconnecting\n", blockHash.ToString(), process_block.first.second.ToString());
-                                const auto it = mapUDPNodes.find(process_block.first.second);
+                                LogPrintf("UDP: Unable to process mempool for block %s from %s, disconnecting\n", blockHash.ToString(), node.ToString());
+                                const auto it = mapUDPNodes.find(node);
                                 if (it != mapUDPNodes.end())
                                     DisconnectNode(it);
                             }

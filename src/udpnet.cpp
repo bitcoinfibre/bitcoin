@@ -1125,3 +1125,15 @@ static void OpenLocalDeviceConnection(bool fWrite) {
             fWrite ? UDP_CONNECTION_TYPE_OUTBOUND_ONLY : UDP_CONNECTION_TYPE_INBOUND_ONLY,
             fWrite ? LOCAL_SEND_GROUP : LOCAL_RECEIVE_GROUP);
 }
+
+bool IsNodeLocalReceive(const CService& node) {
+    std::lock_guard<std::recursive_mutex> udpNodesLock(cs_mapUDPNodes);
+    const auto it = mapUDPNodes.find(node);
+    if (it == mapUDPNodes.end()) {
+        return false;
+    }
+
+    UDPConnectionState& conn_state = it->second;
+    const UDPConnectionInfo& conn_info = conn_state.connection;
+    return (conn_info.group == LOCAL_RECEIVE_GROUP);
+}

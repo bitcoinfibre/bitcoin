@@ -3329,7 +3329,7 @@ bool ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, CValidatio
 }
 
 /** Store block on disk. If dbp is non-nullptr, the file is known to already reside on disk */
-static CDiskBlockPos SaveBlockToDisk(const CBlock& block, int nHeight, const CChainParams& chainparams, const CDiskBlockPos* dbp) {
+CDiskBlockPos SaveBlockToDisk(const CBlock& block, int nHeight, const CChainParams& chainparams, const CDiskBlockPos* dbp) {
     unsigned int nBlockSize = ::GetSerializeSize(block, SER_DISK, CLIENT_VERSION);
     CDiskBlockPos blockPos;
     if (dbp != nullptr)
@@ -3431,7 +3431,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, CVali
     return true;
 }
 
-bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock)
+bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool *fNewBlock, const CDiskBlockPos *diskpos, const bool do_ooob)
 {
     AssertLockNotHeld(cs_main);
 
@@ -3447,7 +3447,7 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
 
         if (ret) {
             // Store to disk
-            ret = g_chainstate.AcceptBlock(pblock, state, chainparams, &pindex, fForceProcessing, nullptr, fNewBlock);
+            ret = g_chainstate.AcceptBlock(pblock, state, chainparams, &pindex, fForceProcessing, diskpos, fNewBlock);
         }
         if (!ret) {
             GetMainSignals().BlockChecked(*pblock, state);
@@ -3460,6 +3460,11 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
     CValidationState state; // Only used to report errors, not invalidity - ignore it
     if (!g_chainstate.ActivateBestChain(state, chainparams, pblock))
         return error("%s: ActivateBestChain failed", __func__);
+
+    if (do_ooob) {
+        // Check if we have any other blocks to process waiting on this one
+        ProcessSuccessorOoOBlocks(chainparams, pblock->GetHash());
+    }
 
     return true;
 }
