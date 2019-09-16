@@ -353,7 +353,7 @@ BOOST_AUTO_TEST_CASE(EmptyBlockRoundTripTest)
     }
 }
 
-BOOST_AUTO_TEST_CASE(SimpleBlockFECRoundTripTest)
+/*BOOST_AUTO_TEST_CASE(SimpleBlockFECRoundTripTest)
 {
     CTxMemPool pool;
     TestMemPoolEntryHelper entry;
@@ -397,11 +397,11 @@ BOOST_AUTO_TEST_CASE(SimpleBlockFECRoundTripTest)
         BOOST_CHECK(!mutated);
     }
     BOOST_CHECK_EQUAL(pool.mapTx.find(block.vtx[2]->GetHash())->GetSharedTx().use_count(), SHARED_TX_OFFSET - 1);
-}
+}*/
 
 #define DIV_CEIL(a, b) (((a) + (b) - 1) / (b))
 
-BOOST_AUTO_TEST_CASE(FECedBlockFECRoundTripTest)
+/*BOOST_AUTO_TEST_CASE(FECedBlockFECRoundTripTest)
 {
     CTxMemPool pool;
     TestMemPoolEntryHelper entry;
@@ -502,7 +502,7 @@ BOOST_AUTO_TEST_CASE(FECedBlockFECRoundTripTest)
         BOOST_CHECK(!mutated);
     }
     BOOST_CHECK_EQUAL(pool.mapTx.find(block.vtx[2]->GetHash())->GetSharedTx().use_count(), SHARED_TX_OFFSET + 0);
-}
+}*/
 
 static void TestBlockWithMempool(const CBlock& block, CTxMemPool& pool) {
     // Do a FEC-coded-block RT
