@@ -123,13 +123,6 @@ extern "C" {
 
 
 //------------------------------------------------------------------------------
-// Portability
-
-/// Swap two memory buffers in-place
-extern void gf256_memswap(void * GF256_RESTRICT vx, void * GF256_RESTRICT vy, int bytes);
-
-
-//------------------------------------------------------------------------------
 // GF(256) Context
 
 #ifdef _MSC_VER
